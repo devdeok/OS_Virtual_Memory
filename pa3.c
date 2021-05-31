@@ -36,7 +36,6 @@ extern struct process *current;
  */
 extern struct pagetable *ptbr;
 
-
 /**
  * The number of mappings for each page frame. Can be used to determine how
  * many processes are using the page frames.
@@ -54,15 +53,50 @@ extern unsigned int mapcounts[];
  *   You may construct the page table of the @current process. When the page
  *   is allocated with RW_WRITE flag, the page may be later accessed for writes.
  *   However, the pages populated with RW_READ only should not be accessed with
- *   RW_WRITE accesses.
+ *   RW_WRITE accesses. 
  *
  * RETURN
  *   Return allocated page frame number.
  *   Return -1 if all page frames are allocated.
  */
-unsigned int alloc_page(unsigned int vpn, unsigned int rw)
-{
-	return -1;
+unsigned int alloc_page(unsigned int vpn, unsigned int rw){
+	/** NR_PAGEFRAMES : 128
+	 *  PTES_PER_PAGE_SHIFT : 4
+	 *  NR_PTES_PER_PAGE : 1 << PTES_PER_PAGE_SHIFT(4) -> 16
+	 *  RW_READ : 0x01
+	 *  RW_WRITE : 0x02
+	 */
+
+	int pd_index = vpn / NR_PTES_PER_PAGE;
+    int pte_index = vpn % NR_PTES_PER_PAGE;
+    int pfn_index; // physical frame number = ppn
+
+
+    for(pfn_index = 0; pfn_index < NR_PAGEFRAMES; pfn_index++){
+		if(mapcounts[pfn_index] == 0) 
+			break;
+    }
+
+   /* 메모리가 가득 찼을 경우 -1 return
+	* vm.c에서 __alloc_page를 통해 처리됨
+	* 메모리가 가득차지 않을 경우 __translate를 통해 
+	* vpn을 pfn으로 translate함
+	*/
+    if(pfn_index >= NR_PAGEFRAMES)
+		return -1;
+
+    if(ptbr->outer_ptes[pd_index] == NULL){
+		ptbr->outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
+    }
+
+    ptbr->outer_ptes[pd_index]->ptes[pte_index].valid = true;
+	    if(rw == 2 || rw == 3){
+		ptbr->outer_ptes[pd_index]->ptes[pte_index].writable = rw;
+    }
+    ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
+	
+	mapcounts[pfn_index]++; // page frame이 증가했으므로 mapcounts 증가
+    return pfn_index;
 }
 
 
@@ -75,8 +109,11 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw)
  *   Also, consider carefully for the case when a page is shared by two processes,
  *   and one process is to free the page.
  */
-void free_page(unsigned int vpn)
-{
+void free_page(unsigned int vpn){
+	int pd_index = vpn / NR_PTES_PER_PAGE;
+    int pte_index = vpn % NR_PTES_PER_PAGE;
+
+
 }
 
 
@@ -96,8 +133,10 @@ void free_page(unsigned int vpn)
  *   @true on successful fault handling
  *   @false otherwise
  */
-bool handle_page_fault(unsigned int vpn, unsigned int rw)
-{
+bool handle_page_fault(unsigned int vpn, unsigned int rw){
+
+
+
 	return false;
 }
 
@@ -120,6 +159,9 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw)
  *   bit in PTE and mapcounts for shared pages. You may use pte->private for 
  *   storing some useful information :-)
  */
-void switch_process(unsigned int pid)
-{
+void switch_process(unsigned int pid){
+
+
+
+
 }
