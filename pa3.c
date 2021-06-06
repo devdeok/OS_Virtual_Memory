@@ -65,37 +65,41 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 	 *  NR_PTES_PER_PAGE : 1 << PTES_PER_PAGE_SHIFT(4) -> 16
 	 *  RW_READ : 0x01
 	 *  RW_WRITE : 0x02
+	 *  r : 1, w : 2, rw : 3
 	 */
 
-	int pd_index = vpn / NR_PTES_PER_PAGE;
-    int pte_index = vpn % NR_PTES_PER_PAGE;
-    int pfn_index; // physical frame number = ppn
-
+	int pd_index = vpn / NR_PTES_PER_PAGE; //page directory : vpn / 16
+    int pte_index = vpn % NR_PTES_PER_PAGE; //page table entity
+    int pfn_index; // physical frame number
 
     for(pfn_index = 0; pfn_index < NR_PAGEFRAMES; pfn_index++){
 		if(mapcounts[pfn_index] == 0) 
 			break;
     }
 
-   /* 메모리가 가득 찼을 경우 -1 return
+   /* 메모리가 이미 찼을 경우 -1 return
 	* vm.c에서 __alloc_page를 통해 처리됨
 	* 메모리가 가득차지 않을 경우 __translate를 통해 
 	* vpn을 pfn으로 translate함
 	*/
-    if(pfn_index >= NR_PAGEFRAMES)
+    if(pfn_index >= NR_PAGEFRAMES) // pfn >= 128
 		return -1;
 
-    if(ptbr->outer_ptes[pd_index] == NULL){
+    if(!ptbr->outer_ptes[pd_index]){
 		ptbr->outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
     }
+	//printf("valid : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].valid);
+	//printf("writable : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].writable);
+	//printf("writable : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn);
+
 
     ptbr->outer_ptes[pd_index]->ptes[pte_index].valid = true;
-	    if(rw == 2 || rw == 3){
+	if(rw == 2 || rw == 3){
 		ptbr->outer_ptes[pd_index]->ptes[pte_index].writable = rw;
-    }
+	}
     ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
 	
-	mapcounts[pfn_index]++; // page frame이 증가했으므로 mapcounts 증가
+	mapcounts[pfn_index]++; // page frame이 증가했으므로 mapcounts증가
     return pfn_index;
 }
 
@@ -113,7 +117,10 @@ void free_page(unsigned int vpn){
 	int pd_index = vpn / NR_PTES_PER_PAGE;
     int pte_index = vpn % NR_PTES_PER_PAGE;
 
-
+	ptbr->outer_ptes[pd_index]->ptes[pte_index].valid = false;
+	ptbr->outer_ptes[pd_index]->ptes[pte_index].writable = 0;
+	ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn = 0;
+	
 }
 
 
