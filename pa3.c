@@ -117,9 +117,11 @@ void free_page(unsigned int vpn){
 	int pd_index = vpn / NR_PTES_PER_PAGE;
     int pte_index = vpn % NR_PTES_PER_PAGE;
 
+	mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]--;
 	ptbr->outer_ptes[pd_index]->ptes[pte_index].valid = false;
 	ptbr->outer_ptes[pd_index]->ptes[pte_index].writable = 0;
 	ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn = 0;
+
 	
 }
 
