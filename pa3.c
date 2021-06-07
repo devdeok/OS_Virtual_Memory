@@ -180,7 +180,7 @@ void switch_process(unsigned int pid){
 	 */
 	struct process *temp = NULL;
 
-	printf("pid : %d\n",pid);
+	// printf("pid : %d\n",pid);
 
 
 	
