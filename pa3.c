@@ -92,8 +92,8 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 	
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = true;
 
-	if(rw == 1) current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = false;
-	else current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = true;
+	if(rw == 1) current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = RW_READ;
+	else current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = RW_WRITE;
 
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
 	
@@ -149,10 +149,15 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
 	int pd_index = vpn / NR_PTES_PER_PAGE;
     int pte_index = vpn % NR_PTES_PER_PAGE;
 
-	// printf("private : %d \n",ptbr->outer_ptes[pd_index]->ptes[pte_index].private);
+	/** CoW
+	 * fork할 때는 write를 꺼둠
+	 * mapcounts가 1이상인 경우도 생각(forked process)
+	 * 
+	 */
 
-
-	
+	// if(current->pagetable.outer_ptes[pd_index]==NULL || 
+	// 	!current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid)
+	// 	return false;
 }
 
 
@@ -175,25 +180,68 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
  *   storing some useful information :-)
  */
 void switch_process(unsigned int pid){
-	/**
-	 * 
-	 */
 	struct process *temp = NULL;
+	struct process *child = NULL;
 
 	// printf("pid : %d\n",pid);
 
+	/** 
+	 * pid가 있는 process가 있는 경우 그 process로 switch
+	 * @current process는 @processes list에 put, 그리고 @current process는
+	 * requested process로 replace
+	 * next process가 @processes로부터 unlinked되고 @ptbr이 올바르게 설정되어있는지 확인
+	*/ 
+	if(!list_empty(&processes)){		
+		list_for_each_entry(temp,&processes,list){
+			// printf("pid : %d\n",temp->pid);
+			if(temp->pid == pid){
+				list_add_tail(&current->list,&processes);
+				list_del_init(&temp->list);
+				current = temp;
+				ptbr = &temp->pagetable;
+				return ;
+			}
+		}
+	}
+	/** 
+	 * pid가 있는 process가 없는 경우 @currnet에서 process를 fork
+ 	 * forked child process가 parent's page table(current)과 동일한 page table entry를
+	 * 가져야 함을 의미한다.
+	 * copy-on-write를 구현하기 위해서는 pte의 writable bit와 
+	 * shared page의 mapcount를 manipulate해야함
+	 * 일부 useful information을 저장하기 위해서는 pte->private를 사용할 수 있음
+	 */ 
+	else{ // fork
+		child = malloc(sizeof(struct process));
+		child->pid = pid;
 
-	
-	// pid가 있는 process가 있는 경우 그 process로 switch
-	// @current process는 @processes list에 put, 그리고 @current process는
-	// requested process로 replace
-	// next process가 @processes로부터 unlinked되고 @ptbr이 올바르게 설정되어있는지 확인
+		for(int i=0;i<NR_PTES_PER_PAGE;i++){
+			if(current->pagetable.outer_ptes[i] != NULL){
+				child->pagetable.outer_ptes[i] = malloc(sizeof(struct pte_directory));
 
+				for(int j=0;j<NR_PTES_PER_PAGE;j++){
+					if(current->pagetable.outer_ptes[i]->ptes[j].valid){
+						child->pagetable.outer_ptes[i]->ptes[j].writable = false;
+						current->pagetable.outer_ptes[i]->ptes[j].writable = false;
+						
+						child->pagetable.outer_ptes[i]->ptes[j].valid = 
+							current->pagetable.outer_ptes[i]->ptes[j].valid;
 
-	// pid가 있는 process가 없는 경우 @currnet에서 process를 fork
-	// forked child process가 parent's page table(current)과 동일한 page table entry를
-	// 가져야 함을 의미한다.
-	// copy-on-write를 구현하기 위해서는  pte의 writable bit와 shared page의 mapcount를 manipulate
-	// 일부 useful information을 저장하기 위해서는 pte->private를 사용할 수 있음
+						child->pagetable.outer_ptes[i]->ptes[j].pfn = 
+							current->pagetable.outer_ptes[i]->ptes[j].pfn;
+
+						child->pagetable.outer_ptes[i]->ptes[j].private = 
+							current->pagetable.outer_ptes[i]->ptes[j].private;
+
+						mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
+					}
+				}
+			}//if
+		}//for
+	}//else
+
+	list_add_tail(&current->list,&processes);
+	current = child;
+	ptbr = &child->pagetable;
 
 }
