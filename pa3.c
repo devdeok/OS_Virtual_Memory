@@ -86,23 +86,18 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
     if(pfn_index >= NR_PAGEFRAMES) // pfn >= 128
 		return -1;
 	
-    if(!current->pagetable.outer_ptes[pd_index]){
+    if(current->pagetable.outer_ptes[pd_index]==NULL){
 		current->pagetable.outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
     }
-	//printf("valid : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].valid);
-	//printf("writable : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].writable);
-	//printf("writable : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn);
-
 	
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = true;
-	if(rw == 2 || rw == 3){
-		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = rw;
-	}
+
+	if(rw == 1) current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = false;
+	else current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = true;
+
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
 	
 	mapcounts[pfn_index]++; // page frame이 증가했으므로 mapcounts증가
-
-	
 
     return pfn_index;
 }
@@ -120,14 +115,11 @@ void free_page(unsigned int vpn){
 	int pd_index = vpn / NR_PTES_PER_PAGE;
     int pte_index = vpn % NR_PTES_PER_PAGE;
 
-	// printf("private : %d \n",ptbr->outer_ptes[pd_index]->ptes[pte_index].private);
-
 	mapcounts[current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn]--;
 
 	current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = false;
 	current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = false;
 	current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = 0;
-
 }
 
 
@@ -157,7 +149,7 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
 	int pd_index = vpn / NR_PTES_PER_PAGE;
     int pte_index = vpn % NR_PTES_PER_PAGE;
 
-	printf("private : %d \n",ptbr->outer_ptes[pd_index]->ptes[pte_index].private);
+	// printf("private : %d \n",ptbr->outer_ptes[pd_index]->ptes[pte_index].private);
 
 
 	
