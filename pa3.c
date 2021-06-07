@@ -62,18 +62,19 @@ extern unsigned int mapcounts[];
 unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 	/** NR_PAGEFRAMES : 128
 	 *  PTES_PER_PAGE_SHIFT : 4
-	 *  NR_PTES_PER_PAGE : 1 << PTES_PER_PAGE_SHIFT(4) -> 16
+	 *  NR_PTES_PER_PAGE : 1 << PTES_PER_PAGE_SHIFT(4) : 2^0->2^4(16)
 	 *  RW_READ : 0x01
 	 *  RW_WRITE : 0x02
-	 *  r : 1, w : 2, rw : 3
+	 *  r:1, w:2, rw:3
+	 * 
+	 * currnet process에 page table 만들어야 됨
 	 */
-
 	int pd_index = vpn / NR_PTES_PER_PAGE; //page directory : vpn / 16
     int pte_index = vpn % NR_PTES_PER_PAGE; //page table entity
     int pfn_index; // physical frame number
-
+	
     for(pfn_index = 0; pfn_index < NR_PAGEFRAMES; pfn_index++){
-		if(mapcounts[pfn_index] == 0) 
+		if(mapcounts[pfn_index]==0)
 			break;
     }
 
@@ -84,25 +85,27 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 	*/
     if(pfn_index >= NR_PAGEFRAMES) // pfn >= 128
 		return -1;
-
-    if(!ptbr->outer_ptes[pd_index]){
-		ptbr->outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
+	
+    if(!current->pagetable.outer_ptes[pd_index]){
+		current->pagetable.outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
     }
 	//printf("valid : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].valid);
 	//printf("writable : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].writable);
 	//printf("writable : %d\n",ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn);
 
-
-    ptbr->outer_ptes[pd_index]->ptes[pte_index].valid = true;
+	
+    current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = true;
 	if(rw == 2 || rw == 3){
-		ptbr->outer_ptes[pd_index]->ptes[pte_index].writable = rw;
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = rw;
 	}
-    ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
+    current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
 	
 	mapcounts[pfn_index]++; // page frame이 증가했으므로 mapcounts증가
+
+	
+
     return pfn_index;
 }
-
 
 /**
  * free_page(@vpn)
@@ -117,12 +120,14 @@ void free_page(unsigned int vpn){
 	int pd_index = vpn / NR_PTES_PER_PAGE;
     int pte_index = vpn % NR_PTES_PER_PAGE;
 
-	mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]--;
-	ptbr->outer_ptes[pd_index]->ptes[pte_index].valid = false;
-	ptbr->outer_ptes[pd_index]->ptes[pte_index].writable = 0;
-	ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn = 0;
+	// printf("private : %d \n",ptbr->outer_ptes[pd_index]->ptes[pte_index].private);
 
-	
+	mapcounts[current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn]--;
+
+	current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = false;
+	current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = false;
+	current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = 0;
+
 }
 
 
@@ -143,10 +148,19 @@ void free_page(unsigned int vpn){
  *   @false otherwise
  */
 bool handle_page_fault(unsigned int vpn, unsigned int rw){
+	/**
+	 * page table을 modify / allocate / fix up
+	 * copy-on-write
+	 * pd = NULL && pte = NULL && pte.writable = X
+	 * rw = write
+	 */
+	int pd_index = vpn / NR_PTES_PER_PAGE;
+    int pte_index = vpn % NR_PTES_PER_PAGE;
+
+	printf("private : %d \n",ptbr->outer_ptes[pd_index]->ptes[pte_index].private);
 
 
-
-	return false;
+	
 }
 
 
@@ -169,8 +183,25 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
  *   storing some useful information :-)
  */
 void switch_process(unsigned int pid){
+	/**
+	 * 
+	 */
+	struct process *temp = NULL;
+
+	printf("pid : %d\n",pid);
 
 
+	
+	// pid가 있는 process가 있는 경우 그 process로 switch
+	// @current process는 @processes list에 put, 그리고 @current process는
+	// requested process로 replace
+	// next process가 @processes로부터 unlinked되고 @ptbr이 올바르게 설정되어있는지 확인
 
+
+	// pid가 있는 process가 없는 경우 @currnet에서 process를 fork
+	// forked child process가 parent's page table(current)과 동일한 page table entry를
+	// 가져야 함을 의미한다.
+	// copy-on-write를 구현하기 위해서는  pte의 writable bit와 shared page의 mapcount를 manipulate
+	// 일부 useful information을 저장하기 위해서는 pte->private를 사용할 수 있음
 
 }
