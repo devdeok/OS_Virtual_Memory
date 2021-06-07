@@ -152,12 +152,20 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
 	/** CoW
 	 * fork할 때는 write를 꺼둠
 	 * mapcounts가 1이상인 경우도 생각(forked process)
-	 * 
 	 */
 
-	// if(current->pagetable.outer_ptes[pd_index]==NULL || 
-	// 	!current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid)
-	// 	return false;
+	//page directory is invalid
+	if(current->pagetable.outer_ptes[pd_index]==NULL){
+		current->pagetable.outer_ptes[pd_index]=malloc(sizeof(struct pte_directory));
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
+		return true;
+	}
+	
+	//pte is invalid
+	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid == false){
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
+		return true;
+	}
 }
 
 
@@ -191,7 +199,7 @@ void switch_process(unsigned int pid){
 	 * requested process로 replace
 	 * next process가 @processes로부터 unlinked되고 @ptbr이 올바르게 설정되어있는지 확인
 	*/ 
-	if(!list_empty(&processes)){//process가 있는 경우	
+	if(!list_empty(&processes)){// process가 있는 경우
 		list_for_each_entry(temp,&processes,list){
 			// printf("pid : %d\n",temp->pid);
 			if(temp->pid == pid){
