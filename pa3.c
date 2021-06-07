@@ -92,8 +92,8 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 	
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = true;
 
-	if(rw == 1) current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = RW_READ;
-	else current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = RW_WRITE;
+	if(rw == 1) current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = false;
+	else current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = true;
 
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
 	
@@ -191,7 +191,7 @@ void switch_process(unsigned int pid){
 	 * requested process로 replace
 	 * next process가 @processes로부터 unlinked되고 @ptbr이 올바르게 설정되어있는지 확인
 	*/ 
-	if(!list_empty(&processes)){		
+	if(!list_empty(&processes)){//process가 있는 경우	
 		list_for_each_entry(temp,&processes,list){
 			// printf("pid : %d\n",temp->pid);
 			if(temp->pid == pid){
@@ -200,18 +200,19 @@ void switch_process(unsigned int pid){
 				current = temp;
 				ptbr = &temp->pagetable;
 				return ;
-			}
-		}
-	}
+			}//if
+		}//list_for_each_entry
+	}//if
+
 	/** 
 	 * pid가 있는 process가 없는 경우 @currnet에서 process를 fork
  	 * forked child process가 parent's page table(current)과 동일한 page table entry를
 	 * 가져야 함을 의미한다.
 	 * copy-on-write를 구현하기 위해서는 pte의 writable bit와 
-	 * shared page의 mapcount를 manipulate해야함
+	 * shared page의 mapcount를 manipulate해야함(wirtable를 꺼두어야 함)
 	 * 일부 useful information을 저장하기 위해서는 pte->private를 사용할 수 있음
 	 */ 
-	else{ // fork
+	else{//process가 없는 경우
 		child = malloc(sizeof(struct process));
 		child->pid = pid;
 
@@ -235,13 +236,12 @@ void switch_process(unsigned int pid){
 
 						mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
 					}
-				}
-			}//if
-		}//for
+				}//for i
+			}//if 
+		}//for j
 	}//else
 
 	list_add_tail(&current->list,&processes);
 	current = child;
 	ptbr = &child->pagetable;
-
 }
