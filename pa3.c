@@ -157,17 +157,19 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
 		return true;
 	}
 
-	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private==1 &&
+	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private==true &&
 	   mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]>1){//하나의 pfn에 2개이상 할당
 		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable=1;// 쓰기모드로 변경
 		mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]--;//해당 pfn 1줄이고
-		alloc_page(vpn,rw);//새로운 pfn 배정
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private=false;
+		alloc_page(vpn,rw);//새로운 pfn 할당
 		return true;
 	}	
 
-	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private==1 &&
+	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private==true &&
 	   mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]==1){//하나의 pfn에 1개만 할당됨
 		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = 1;//쓰기 모드로 변경
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private=false;
 		return true;
 	}
 
@@ -232,6 +234,16 @@ void switch_process(unsigned int pid){
 
 			for(int j=0;j<NR_PTES_PER_PAGE;j++){
 				if(current->pagetable.outer_ptes[i]->ptes[j].valid){
+
+					if(current->pagetable.outer_ptes[i]->ptes[j].writable==false){//쓰기모드 아닌거
+						child->pagetable.outer_ptes[i]->ptes[j].private = false;
+						current->pagetable.outer_ptes[i]->ptes[j].private = false;
+					}
+					else{
+						child->pagetable.outer_ptes[i]->ptes[j].private = true;
+						current->pagetable.outer_ptes[i]->ptes[j].private = true;
+					}
+					
 					child->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
 					current->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
 					
@@ -240,9 +252,6 @@ void switch_process(unsigned int pid){
 
 					child->pagetable.outer_ptes[i]->ptes[j].pfn = 
 						current->pagetable.outer_ptes[i]->ptes[j].pfn;
-
-					child->pagetable.outer_ptes[i]->ptes[j].private = 1;
-					current->pagetable.outer_ptes[i]->ptes[j].private = 1;
 
 					mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
 				}
