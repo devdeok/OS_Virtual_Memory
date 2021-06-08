@@ -205,7 +205,6 @@ void switch_process(unsigned int pid){
 	*/ 
 	// if(!list_empty(&processes)){// process가 있는 경우
 		list_for_each_entry(temp,&processes,list){
-			printf("pid : %d\n",temp->pid);
 			if(temp->pid == pid){ // pid가 있음
 				list_add_tail(&current->list,&processes);
 				list_del_init(&temp->list);
