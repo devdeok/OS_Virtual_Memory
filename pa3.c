@@ -237,10 +237,6 @@ void switch_process(unsigned int pid){
 
 					if(current->pagetable.outer_ptes[i]->ptes[j].writable==true)//쓰기모드 아닌거
 						current->pagetable.outer_ptes[i]->ptes[j].private = true;
-					else{
-						child->pagetable.outer_ptes[i]->ptes[j].private = true;
-						current->pagetable.outer_ptes[i]->ptes[j].private = true;
-					}
 
 					child->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
 					current->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
