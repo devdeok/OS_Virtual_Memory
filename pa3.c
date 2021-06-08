@@ -235,15 +235,13 @@ void switch_process(unsigned int pid){
 			for(int j=0;j<NR_PTES_PER_PAGE;j++){
 				if(current->pagetable.outer_ptes[i]->ptes[j].valid){
 
-					if(current->pagetable.outer_ptes[i]->ptes[j].writable==false){//쓰기모드 아닌거
-						child->pagetable.outer_ptes[i]->ptes[j].private = false;
-						current->pagetable.outer_ptes[i]->ptes[j].private = false;
-					}
+					if(current->pagetable.outer_ptes[i]->ptes[j].writable==true)//쓰기모드 아닌거
+						current->pagetable.outer_ptes[i]->ptes[j].private = true;
 					else{
 						child->pagetable.outer_ptes[i]->ptes[j].private = true;
 						current->pagetable.outer_ptes[i]->ptes[j].private = true;
 					}
-					
+
 					child->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
 					current->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
 					
@@ -252,6 +250,9 @@ void switch_process(unsigned int pid){
 
 					child->pagetable.outer_ptes[i]->ptes[j].pfn = 
 						current->pagetable.outer_ptes[i]->ptes[j].pfn;
+
+					child->pagetable.outer_ptes[i]->ptes[j].private =
+						current->pagetable.outer_ptes[i]->ptes[j].private;
 
 					mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
 				}
