@@ -91,7 +91,6 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
     if(current->pagetable.outer_ptes[pd_index]==NULL){ //pd is invalid
 		current->pagetable.outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
     }
-	printf("rw : %d\n",rw);
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = true;
 
 	if(rw == 1) current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = false;
@@ -142,30 +141,18 @@ void free_page(unsigned int vpn){
  *   @false otherwise
  */
 bool handle_page_fault(unsigned int vpn, unsigned int rw){
-	/**
-	 * page table을 modify / allocate / fix up
-	 * copy-on-write
-	 * pd = NULL && pte = NULL && pte.writable = X
-	 * rw = write
-	 */
-	int pd_index = vpn / NR_PTES_PER_PAGE;
-    int pte_index = vpn % NR_PTES_PER_PAGE;
+	int pte_index= vpn % 16;
+	int pd_index = vpn / 16;
 
-	/** CoW
-	 * fork할 때는 write를 꺼둠
-	 * mapcounts가 1이상인 경우도 생각(forked process)
-	 */
-
-	//page directory is invalid
-	if(current->pagetable.outer_ptes[pd_index]==NULL){
-		current->pagetable.outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
-		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
+	if(mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]>1){//하나의 pfn에 2개이상 할당
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable=1;// 쓰기모드로 변경
+		mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]--;//해당 pfn 1줄이고
+		alloc_page(vpn,rw);//새로운 pfn 배정
 		return true;
-	}
-	
-	//pte is invalid
-	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid == false){
-		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
+	}	
+
+	if(mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]==1){//하나의 pfn에 1개만 할당됨
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = 1;//쓰기 모드로 변경
 		return true;
 	}
 
@@ -203,17 +190,15 @@ void switch_process(unsigned int pid){
 	 * requested process로 replace
 	 * next process가 @processes로부터 unlinked되고 @ptbr이 올바르게 설정되어있는지 확인
 	*/ 
-	// if(!list_empty(&processes)){// process가 있는 경우
-		list_for_each_entry(temp,&processes,list){
-			if(temp->pid == pid){ // pid가 있음
-				list_add_tail(&current->list,&processes);
-				list_del_init(&temp->list);
-				current = temp;
-				ptbr = &(temp->pagetable);
-				return;
-			}//if (입력된 pid와 process의 pid가 같음)
-		}//list_for_each_entry
-	// }//process가 있는 경우
+	list_for_each_entry(temp,&processes,list){
+		if(temp->pid == pid){ // pid가 있음
+			list_add_tail(&current->list,&processes);
+			list_del_init(&temp->list);
+			current = temp;
+			ptbr = &(temp->pagetable);
+			return;
+		}//if (입력된 pid와 process의 pid가 같음)
+	}//list_for_each_entry
 
 	/** 
 	 * pid가 있는 process가 없는 경우 @currnet에서 process를 fork
@@ -223,34 +208,33 @@ void switch_process(unsigned int pid){
 	 * shared page의 mapcount를 manipulate해야함(wirtable를 꺼두어야 함)
 	 * 일부 useful information을 저장하기 위해서는 pte->private를 사용할 수 있음
 	 */
-	// else{//process가 비어있음
-		child = malloc(sizeof(struct process)); // fork할 process
-		child->pid = pid;
+	child = malloc(sizeof(struct process)); // fork할 process
+	child->pid = pid;
 
-		for(int i=0;i<NR_PTES_PER_PAGE;i++){
-			if(current->pagetable.outer_ptes[i] != NULL){ //currnet pd is valid
-				child->pagetable.outer_ptes[i] = malloc(sizeof(struct pte_directory));
+	for(int i=0;i<NR_PTES_PER_PAGE;i++){
+		if(current->pagetable.outer_ptes[i] != NULL){ //currnet pd is valid
+			child->pagetable.outer_ptes[i] = malloc(sizeof(struct pte_directory));
 
-				for(int j=0;j<NR_PTES_PER_PAGE;j++){
-					if(current->pagetable.outer_ptes[i]->ptes[j].valid){
-						child->pagetable.outer_ptes[i]->ptes[j].writable = false;
-						current->pagetable.outer_ptes[i]->ptes[j].writable = false;
-						
-						child->pagetable.outer_ptes[i]->ptes[j].valid = 
-							current->pagetable.outer_ptes[i]->ptes[j].valid;
+			for(int j=0;j<NR_PTES_PER_PAGE;j++){
+				if(current->pagetable.outer_ptes[i]->ptes[j].valid){
+					child->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
+					current->pagetable.outer_ptes[i]->ptes[j].writable = false;//CoW
+					
+					child->pagetable.outer_ptes[i]->ptes[j].valid = 
+						current->pagetable.outer_ptes[i]->ptes[j].valid;
 
-						child->pagetable.outer_ptes[i]->ptes[j].pfn = 
-							current->pagetable.outer_ptes[i]->ptes[j].pfn;
+					child->pagetable.outer_ptes[i]->ptes[j].pfn = 
+						current->pagetable.outer_ptes[i]->ptes[j].pfn;
 
-						child->pagetable.outer_ptes[i]->ptes[j].private = 
-							current->pagetable.outer_ptes[i]->ptes[j].private;
+					child->pagetable.outer_ptes[i]->ptes[j].private = 
+						current->pagetable.outer_ptes[i]->ptes[j].private;
 
-						mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
-					}
-				}//for i
-			}//if (pd is valid)
-		}//for j
-	// }//process가 없는 경우
+					mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
+				}
+			}//for i
+		}//if (pd is valid)
+	}//for j
+
 
 	list_add_tail(&current->list,&processes);
 	current = child;
