@@ -65,16 +65,18 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 	 *  NR_PTES_PER_PAGE : 1 << PTES_PER_PAGE_SHIFT(4) : 2^0->2^4(16)
 	 *  RW_READ : 0x01
 	 *  RW_WRITE : 0x02
-	 *  r:1, w:2, rw:3
+	 *  r:1 / w:2 / rw:3
 	 * 
 	 * currnet process에 page table 만들어야 됨
 	 */
-	int pd_index = vpn / NR_PTES_PER_PAGE; //page directory : vpn / 16
-    int pte_index = vpn % NR_PTES_PER_PAGE; //page table entity
+
+	// Hiereachical Page Tables
+	int pd_index = vpn / NR_PTES_PER_PAGE; //page directory : outer
+    int pte_index = vpn % NR_PTES_PER_PAGE; //page table entity : inner
     int pfn_index; // physical frame number
 	
     for(pfn_index = 0; pfn_index < NR_PAGEFRAMES; pfn_index++){
-		if(mapcounts[pfn_index]==0)
+		if(mapcounts[pfn_index]==0) // linke된 곳이 없음
 			break;
     }
 
@@ -83,13 +85,13 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 	* 메모리가 가득차지 않을 경우 __translate를 통해 
 	* vpn을 pfn으로 translate함
 	*/
-    if(pfn_index >= NR_PAGEFRAMES) // pfn >= 128
+    if(pfn_index >= NR_PAGEFRAMES) //page frame의 개수를 넘어가면 -1 
 		return -1;
 	
-    if(current->pagetable.outer_ptes[pd_index]==NULL){
+    if(current->pagetable.outer_ptes[pd_index]==NULL){ //pd is invalid
 		current->pagetable.outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
     }
-	
+	printf("rw : %d\n",rw);
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid = true;
 
 	if(rw == 1) current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = false;
@@ -97,7 +99,7 @@ unsigned int alloc_page(unsigned int vpn, unsigned int rw){
 
     current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = pfn_index;
 	
-	mapcounts[pfn_index]++; // page frame이 증가했으므로 mapcounts증가
+	mapcounts[pfn_index]++; //page frame이 할당되었으므로 비어있는 index에 link된 개수 업데이트
 
     return pfn_index;
 }
@@ -156,7 +158,7 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
 
 	//page directory is invalid
 	if(current->pagetable.outer_ptes[pd_index]==NULL){
-		current->pagetable.outer_ptes[pd_index]=malloc(sizeof(struct pte_directory));
+		current->pagetable.outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
 		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
 		return true;
 	}
@@ -166,6 +168,8 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
 		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
 		return true;
 	}
+
+	return false;
 }
 
 
@@ -199,18 +203,18 @@ void switch_process(unsigned int pid){
 	 * requested process로 replace
 	 * next process가 @processes로부터 unlinked되고 @ptbr이 올바르게 설정되어있는지 확인
 	*/ 
-	if(!list_empty(&processes)){// process가 있는 경우
+	// if(!list_empty(&processes)){// process가 있는 경우
 		list_for_each_entry(temp,&processes,list){
-			// printf("pid : %d\n",temp->pid);
-			if(temp->pid == pid){
+			printf("pid : %d\n",temp->pid);
+			if(temp->pid == pid){ // pid가 있음
 				list_add_tail(&current->list,&processes);
 				list_del_init(&temp->list);
 				current = temp;
-				ptbr = &temp->pagetable;
-				return ;
-			}//if
+				ptbr = &(temp->pagetable);
+				return;
+			}//if (입력된 pid와 process의 pid가 같음)
 		}//list_for_each_entry
-	}//if
+	// }//process가 있는 경우
 
 	/** 
 	 * pid가 있는 process가 없는 경우 @currnet에서 process를 fork
@@ -219,13 +223,13 @@ void switch_process(unsigned int pid){
 	 * copy-on-write를 구현하기 위해서는 pte의 writable bit와 
 	 * shared page의 mapcount를 manipulate해야함(wirtable를 꺼두어야 함)
 	 * 일부 useful information을 저장하기 위해서는 pte->private를 사용할 수 있음
-	 */ 
-	else{//process가 없는 경우
-		child = malloc(sizeof(struct process));
+	 */
+	// else{//process가 비어있음
+		child = malloc(sizeof(struct process)); // fork할 process
 		child->pid = pid;
 
 		for(int i=0;i<NR_PTES_PER_PAGE;i++){
-			if(current->pagetable.outer_ptes[i] != NULL){
+			if(current->pagetable.outer_ptes[i] != NULL){ //currnet pd is valid
 				child->pagetable.outer_ptes[i] = malloc(sizeof(struct pte_directory));
 
 				for(int j=0;j<NR_PTES_PER_PAGE;j++){
@@ -245,11 +249,12 @@ void switch_process(unsigned int pid){
 						mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
 					}
 				}//for i
-			}//if 
+			}//if (pd is valid)
 		}//for j
-	}//else
+	// }//process가 없는 경우
 
 	list_add_tail(&current->list,&processes);
 	current = child;
-	ptbr = &child->pagetable;
+	ptbr = &(child->pagetable);
 }
+
