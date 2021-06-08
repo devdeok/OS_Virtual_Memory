@@ -144,14 +144,29 @@ bool handle_page_fault(unsigned int vpn, unsigned int rw){
 	int pte_index= vpn % 16;
 	int pd_index = vpn / 16;
 
-	if(mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]>1){//하나의 pfn에 2개이상 할당
+	//page directory is invalid
+	if(current->pagetable.outer_ptes[pd_index]==NULL){
+		current->pagetable.outer_ptes[pd_index] = malloc(sizeof(struct pte_directory));
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
+		return true;
+	}
+	
+	//pte is invalid
+	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].valid == false){
+		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].pfn = alloc_page(vpn,rw);
+		return true;
+	}
+
+	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private==1 &&
+	   mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]>1){//하나의 pfn에 2개이상 할당
 		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable=1;// 쓰기모드로 변경
 		mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]--;//해당 pfn 1줄이고
 		alloc_page(vpn,rw);//새로운 pfn 배정
 		return true;
 	}	
 
-	if(mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]==1){//하나의 pfn에 1개만 할당됨
+	if(current->pagetable.outer_ptes[pd_index]->ptes[pte_index].private==1 &&
+	   mapcounts[ptbr->outer_ptes[pd_index]->ptes[pte_index].pfn]==1){//하나의 pfn에 1개만 할당됨
 		current->pagetable.outer_ptes[pd_index]->ptes[pte_index].writable = 1;//쓰기 모드로 변경
 		return true;
 	}
@@ -226,8 +241,8 @@ void switch_process(unsigned int pid){
 					child->pagetable.outer_ptes[i]->ptes[j].pfn = 
 						current->pagetable.outer_ptes[i]->ptes[j].pfn;
 
-					child->pagetable.outer_ptes[i]->ptes[j].private = 
-						current->pagetable.outer_ptes[i]->ptes[j].private;
+					child->pagetable.outer_ptes[i]->ptes[j].private = 1;
+					current->pagetable.outer_ptes[i]->ptes[j].private = 1;
 
 					mapcounts[child->pagetable.outer_ptes[i]->ptes[j].pfn]++;
 				}
